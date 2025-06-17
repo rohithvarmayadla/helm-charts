@@ -102,7 +102,7 @@ jobs:
             rm -f $chart/README.generated.md
 
             # Generate CHANGELOG (dry run, do not overwrite)
-            npx conventional-changelog -p angular -i $chart/CHANGELOG.md -s -r 0 --commit-path $chart > $chart/CHANGELOG.generated.md
+            npx conventional-changelog -i $chart/CHANGELOG.md -s -t $chart -r 0 --commit-path $chart > $chart/CHANGELOG.generated.md
             if ! diff -q $chart/CHANGELOG.md $chart/CHANGELOG.generated.md > /dev/null; then
               echo "CHANGELOG.md for $chart is not up to date. Please run conventional-changelog."
               need_update="yes"
