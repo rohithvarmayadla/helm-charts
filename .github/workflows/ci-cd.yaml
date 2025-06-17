@@ -96,21 +96,19 @@ jobs:
             # Generate README
             npx @bitnami/readme-generator-for-helm --readme $chart/README.md --values $chart/values.yaml
             # Check for uncommitted changes in README.md
-            if git status -s README.md; then
+            if git status -s | grep $chart/README.md; then
               echo "README.md for $chart is not up to date. Please run @bitnami/readme-generator-for-helm."
               need_update="yes"
             fi
 
             # Generate CHANGELOG (dry run, do not overwrite)
-            npx conventional-changelog -i $chart/CHANGELOG.md -s -t $chart -r 0 --commit-path $chart > $chart/CHANGELOG.generated.md
-            if ! diff -q $chart/CHANGELOG.md $chart/CHANGELOG.generated.md > /dev/null; then
+            npx conventional-changelog -i $chart/CHANGELOG.md -s -t $chart -r 0 --commit-path $chart
+            if git status -s | grep $chart/README.md; then
               echo "CHANGELOG.md for $chart is not up to date. Please run conventional-changelog."
               need_update="yes"
             fi
-            rm -f $chart/CHANGELOG.generated.md
           done
           if [ "$need_update" = "yes" ]; then
-            echo "README.md and/or CHANGELOG.md need to be updated for one or more charts."
             exit 1
           fi
 
