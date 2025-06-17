@@ -94,12 +94,12 @@ jobs:
           need_update=""
           for chart in $(cat changed.txt); do
             # Generate README
-            npx @bitnami/readme-generator-for-helm --chart-dir $chart --output $chart/README.generated.md
-            if ! diff -q $chart/README.md $chart/README.generated.md > /dev/null; then
-              echo "README.md for $chart is not up to date. Please run the readme generator."
+            npx @bitnami/readme-generator-for-helm --readme $chart/README.md --values $chart/values.yaml
+            # Check for uncommitted changes in README.md
+            if git status -s README.md; then
+              echo "README.md for $chart is not up to date. Please run @bitnami/readme-generator-for-helm."
               need_update="yes"
             fi
-            rm -f $chart/README.generated.md
 
             # Generate CHANGELOG (dry run, do not overwrite)
             npx conventional-changelog -i $chart/CHANGELOG.md -s -t $chart -r 0 --commit-path $chart > $chart/CHANGELOG.generated.md
