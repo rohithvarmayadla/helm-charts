@@ -172,7 +172,13 @@ argfile.yml:
   webhook-url: '{{ include "acapy.host" . }}'
 
 ## @param ledgers.yml [object]
-ledgers.yml: {}
+ledgers.yml:
+  - id: bcovrin-test
+    is_production: true
+    is_write: true
+    genesis_url: "http://test.bcovrin.vonx.io/genesis"
+    endorser_did: "DfQetNSm7gGEHuzfUvpfPn"
+    endorser_alias: "bcovrin-test-endorser"
 
 ## Specify configuration values for each plugin.
 ## Configuration values are plugin specific, and are rendered as is into the plugin-config.yml file.
