@@ -256,7 +256,7 @@ persistence:
   ## If defined, PVC must be created manually before volume will be bound
   ##
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   ## @param persistence.size PVC Storage Request for Tails volume
   ##
   size: 1Gi
@@ -625,7 +625,6 @@ resources: {}
 ## @param livenessProbe.httpGet.port Port for livenessProbe
 ##
 livenessProbe:
-  enabled: true
   initialDelaySeconds: 30
   periodSeconds: 20
   timeoutSeconds: 10
@@ -646,7 +645,6 @@ livenessProbe:
 ## @param readinessProbe.httpGet.port Port for readinessProbe
 ##
 readinessProbe:
-  enabled: true
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5

@@ -131,7 +131,7 @@ NOTE: admin_user must have the CREATEDB role or else initialization will fail.
 | `persistence.enabled`       | Enable persistence using PVC         | `true`              |
 | `persistence.existingClaim` | Name of an existing PVC to use       | `""`                |
 | `persistence.storageClass`  | PVC Storage Class for Tails volume   | `""`                |
-| `persistence.accessModes`   | PVC Access Mode for Tails volume     | `["ReadWriteMany"]` |
+| `persistence.accessModes`   | PVC Access Mode for Tails volume     | `["ReadWriteOnce"]` |
 | `persistence.size`          | PVC Storage Request for Tails volume | `1Gi`               |
 | `persistence.annotations`   | Persistent Volume Claim annotations  | `{}`                |
 
