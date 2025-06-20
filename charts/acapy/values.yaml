@@ -257,7 +257,7 @@ persistence:
   ##   GKE, AWS & OpenStack)
   ##
   storageClass: ""
-  ## @param persistence.accessModes PVC Access Mode for Tails volume
+  ## @param persistence.accessModes PVC Access Mode for Tails volume. Must be ReadWriteMany for deployment with multiple replicas.
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
   ##
