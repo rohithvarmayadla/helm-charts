@@ -2,6 +2,9 @@ name: Helm Chart CI/CD
 
 on:
   pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
     paths:
       - 'charts/**'
   push:
@@ -11,161 +14,289 @@ on:
       - 'charts/**'
 
 jobs:
-  lint-test:
+  detect-changed-chart:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4.2.0
-        with:
-          version: v3.18.2
+      - name: Detect changed chart
+        id: detect
+        uses: ./.github/actions/detect-chart
+    outputs:
+      chart: ${{ steps.detect.outputs.chart }}
 
-      - name: Add Helm repos from chart dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          npm install -g yq
-          charts=$(cat changed.txt 2>/dev/null || find charts -mindepth 1 -maxdepth 1 -type d)
-          repos=""
-          for chart in $charts; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml"
-            fi
-          done | sort | uniq | while read repo; do
-            if [ -n "$repo" ]; then
-              name=$(echo "$repo" | sed 's|https\?://||;s|/|_|g')
-              helm repo add "$name" "$repo" || true
-            fi
-          done
+  lint-test:
+    runs-on: ubuntu-latest
+    needs: detect-changed-chart
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/yq
+            ~/.cache/helm
+            ~/.npm
+          key: ${{ runner.os }}-deps-${{ needs.detect-changed-chart.outputs.chart }}-${{ hashFiles('${{ needs.detect-changed-chart.outputs.chart }}/**/*') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.18.4
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.7.0
 
-      - name: Lint changed charts
-        run: ct lint --config .github/ct.yaml
+      - name: Add Helm repos and update dependencies
+        run: |
+          chart=${{ needs.detect-changed-chart.outputs.chart }}
+          if [ ! -f "$chart/Chart.yaml" ]; then
+            echo "❌ Chart.yaml not found in $chart"
+            exit 1
+          fi
+
+          # Add Helm repos from chart dependencies
+          yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml" | sort | uniq | while read repo; do
+            if [ -n "$repo" ] && [ "$repo" != "null" ]; then
+              name=$(echo "$repo" | sed 's|https\?://||;s|/|_|g;s|[^a-zA-Z0-9_-]||g')
+              echo "Adding repo: $name -> $repo"
+              helm repo add "$name" "$repo" || echo "⚠️ Warning: Failed to add repo $repo"
+            fi
+          done
+
+          # Update Helm dependencies
+          if [ -f "$chart/Chart.yaml" ]; then
+            helm dependency update "$chart" || {
+              echo "❌ Failed to update dependencies for $chart"
+              exit 1
+            }
+          fi
+
+      - name: Lint changed chart
+        run: ct lint --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
+
+      - name: Validate chart templates
+        run: |
+          chart=${{ needs.detect-changed-chart.outputs.chart }}
+          helm template "$chart" > /dev/null || {
+            echo "❌ Failed to render templates for $chart"
+            exit 1
+          }
 
       - name: Create kind cluster
         uses: helm/kind-action@v1
 
-      - name: Test install changed charts
-        run: ct install --config .github/ct.yaml
+      - name: Test install changed chart
+        run: ct install --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
-      - name: Find changed charts
-        id: changed
+      - name: Check version and appVersion bump
         run: |
-          ct list-changed --config .github/ct.yaml > changed.txt
-          echo "charts=$(cat changed.txt | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+          chart="${{ needs.detect-changed-chart.outputs.chart }}"
+          echo "Checking $chart..."
 
-      - name: Ensure README and CHANGELOG updated
-        if: steps.changed.outputs.charts != ''
-        run: |
-          missing=""
-          for chart in $(cat changed.txt); do
-            if ! git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "^$chart/README.md$"; then
-              echo "README.md not updated for $chart"
-              missing="yes"
+          # Check chart version bump
+          compare_versions() {
+            local old_version=$1 new_version=$2
+            # If old_version sorts first, then new_version is greater (correct)
+            if [ "$(printf '%s\n' "$old_version" "$new_version" | sort -V | head -n1)" = "$old_version" ] && [ "$old_version" != "$new_version" ]; then
+              echo "✅ Version bump: $old_version → $new_version"
+            else
+              echo "❌ New version ($new_version) is not greater than old version ($old_version)"
+              exit 1
             fi
-            if ! git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "^$chart/CHANGELOG.md$"; then
-              echo "CHANGELOG.md not updated for $chart"
-              missing="yes"
-            fi
-          done
-          if [ "$missing" = "yes" ]; then
-            echo "Please update README.md and CHANGELOG.md for all changed charts."
-            exit 1
+          }
+          old_version=$(git show ${{ github.event.pull_request.base.sha }}:$chart/Chart.yaml 2>/dev/null | yq '.version // "0.0.0"' || echo "0.0.0")
+          new_version=$(yq '.version // "0.0.0"' $chart/Chart.yaml)
+          compare_versions "$old_version" "$new_version"
+
+          # Check appVersion bump
+          old_app=$(git show ${{ github.event.pull_request.base.sha }}:$chart/Chart.yaml 2>/dev/null | yq '.appVersion // "0.0.0"' || echo "0.0.0")
+          new_app=$(yq '.appVersion // "0.0.0"' $chart/Chart.yaml)
+          if [[ "$old_app" == "$new_app" ]]; then
+            echo "⚠️ Warning: appVersion for $chart is unchanged ($new_app). Not failing, but consider bumping."
           fi
 
       - name: Set up Node.js for generators
-        if: steps.changed.outputs.charts != ''
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
       - name: Install readme and changelog generators
-        if: steps.changed.outputs.charts != ''
         run: |
-          npm install -g @bitnami/readme-generator-for-helm conventional-changelog-cli
+          npm install -g @bitnami/readme-generator-for-helm conventional-changelog-cli conventional-changelog-conventionalcommits
 
-      - name: Generate and check README and CHANGELOG
-        if: steps.changed.outputs.charts != ''
+      - name: Check README and CHANGELOG updates
         run: |
-          need_update=""
-          for chart in $(cat changed.txt); do
-            # Generate README
-            npx @bitnami/readme-generator-for-helm --readme $chart/README.md --values $chart/values.yaml
-            # Check for uncommitted changes in README.md
-            if git status -s | grep $chart/README.md; then
-              echo "README.md for $chart is not up to date. Please run @bitnami/readme-generator-for-helm."
-              need_update="yes"
-            fi
+          chart=${{ needs.detect-changed-chart.outputs.chart }}
 
-            # Check that CHANGELOG.md was updated
-            if ! git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -q "^$chart/CHANGELOG.md$"; then
-              echo "CHANGELOG.md not updated for $chart. Please run conventional-changelog-cli."
-              need_update="yes"
-            fi
-          done
-          if [ "$need_update" = "yes" ]; then
-            exit 1
+          # Store original files for comparison
+          cp "$chart/README.md" "$chart/README.md.original" 2>/dev/null || touch "$chart/README.md.original"
+          cp "$chart/CHANGELOG.md" "$chart/CHANGELOG.md.original" 2>/dev/null || touch "$chart/CHANGELOG.md.original"
+
+          # Generate fresh README and CHANGELOG
+          echo "🔄 Generating fresh README for $chart..."
+          npx @bitnami/readme-generator-for-helm --readme "$chart/README.md" --values "$chart/values.yaml"
+
+          echo "🔄 Generating fresh CHANGELOG for $chart..."
+          npx conventional-changelog -p conventionalcommits -i "$chart/CHANGELOG.md" -s
+
+          # Check if README needs to be updated
+          readme_needs_update=false
+          if ! diff -q "$chart/README.md.original" "$chart/README.md" >/dev/null 2>&1; then
+            readme_needs_update=true
+            echo "📝 README.md has changes after generation"
           fi
+
+          # Check CHANGELOG (advisory only) - exclude documentation-only changes
+          functional_changes=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} "$chart/" | grep -v -E '(README\.md|CHANGELOG\.md|\.md$|NOTES\.txt)$' || true)
+
+          changelog_could_update=false
+          if ! diff -q "$chart/CHANGELOG.md.original" "$chart/CHANGELOG.md" >/dev/null 2>&1; then
+            changelog_could_update=true
+          fi
+
+          # Restore original files before reporting
+          mv "$chart/README.md.original" "$chart/README.md"
+          mv "$chart/CHANGELOG.md.original" "$chart/CHANGELOG.md"
+
+          # Report results - only fail on README issues
+          if [ "$readme_needs_update" = true ]; then
+            echo "❌ README.md for $chart needs to be updated."
+            echo "   The values.yaml file has @param annotations that require README regeneration."
+            echo "   Please run: npx @bitnami/readme-generator-for-helm --readme $chart/README.md --values $chart/values.yaml"
+            echo ""
+            echo "🛠️  To fix this issue:"
+            echo "   1. Install generator: npm install -g @bitnami/readme-generator-for-helm"
+            echo "   2. Update README: npx @bitnami/readme-generator-for-helm --readme $chart/README.md --values $chart/values.yaml"
+            echo "   3. Commit the updated README.md"
+            echo ""
+            exit 1
+          else
+            echo "✅ README.md is up to date"
+          fi
+
+          # Clean up temporary files
+          rm -f "$chart/README.md.original" "$chart/CHANGELOG.md.original"
+
+          # CHANGELOG guidance (never fails)
+          if [ -z "$functional_changes" ]; then
+            echo "✅ Documentation-only changes detected, CHANGELOG update not required"
+          elif [ "$changelog_could_update" = true ]; then
+            echo "📋 Functional changes detected:"
+            echo "$functional_changes" | sed 's/^/  /'
+            echo ""
+            echo "⚠️  CHANGELOG could be updated, but this is not enforced."
+            echo "   If your changes are significant (new features, bug fixes, breaking changes),"
+            echo "   please consider running: npx conventional-changelog -p conventionalcommits -i $chart/CHANGELOG.md -s"
+            echo ""
+            echo "   💡 Skip this if you're just fixing typos, formatting, or making trivial changes."
+          else
+            echo "✅ CHANGELOG guidance: No update needed or already up to date"
+          fi
+
+          echo "🎉 All documentation is up to date!"
+
+      - name: Post PR comment on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ **PR checks failed**
+
+              Please check the workflow logs for specific issues. Common fixes:
+
+              📝 **Documentation Updates Needed:**
+              - If \`values.yaml\` was modified: \`npx @bitnami/readme-generator-for-helm --readme charts/CHART/README.md --values charts/CHART/values.yaml\`
+              - If significant changes were made: \`npx conventional-changelog -p conventionalcommits -i charts/CHART/CHANGELOG.md -s\`
+
+              🔧 **Other Common Issues:**
+              - Version bump required in Chart.yaml
+              - Helm template validation errors
+              - Chart linting issues
+
+              After making fixes, commit and push the changes.`
+            })
 
   publish:
     runs-on: ubuntu-latest
-    needs: lint-test
-    if: github.ref == 'refs/heads/main'
+    needs: [detect-changed-chart, lint-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4.2.0
+        uses: azure/setup-helm@v4.3.0
         with:
-          version: v3.18.2
+          version: v3.18.4
 
       - name: Add Helm repos from chart dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          npm install -g yq
-          charts=$(cat changed.txt 2>/dev/null || find charts -mindepth 1 -maxdepth 1 -type d)
-          repos=""
-          for chart in $charts; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml"
-            fi
-          done | sort | uniq | while read repo; do
-            if [ -n "$repo" ]; then
-              name=$(echo "$repo" | sed 's|https\?://||;s|/|_|g')
-              helm repo add "$name" "$repo" || true
+          chart=${{ needs.detect-changed-chart.outputs.chart }}
+          if [ ! -f "$chart/Chart.yaml" ]; then
+            echo "❌ Chart.yaml not found in $chart"
+            exit 1
+          fi
+          yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml" | sort | uniq | while read repo; do
+            if [ -n "$repo" ] && [ "$repo" != "null" ]; then
+              name=$(echo "$repo" | sed 's|https\?://||;s|/|_|g;s|[^a-zA-Z0-9_-]||g')
+              echo "Adding repo: $name -> $repo"
+              helm repo add "$name" "$repo" || echo "Warning: Failed to add repo $repo"
             fi
           done
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.7.0
 
-      - name: Find changed charts
-        id: changed
-        run: |
-          ct list-changed --config .github/ct.yaml > changed.txt
-          echo "charts=$(cat changed.txt | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
-
-      - name: Package changed charts
-        if: steps.changed.outputs.charts != ''
+      - name: Prepare release directories and index
         run: |
           mkdir -p .cr-release-packages
-          for chart in $(cat changed.txt); do
-            helm package $chart --destination .cr-release-packages
-          done
+          mkdir -p .cr-existing-index
+
+          # Clone existing index.yaml from gh-pages (if any)
+          git fetch origin gh-pages
+          git show origin/gh-pages:index.yaml > .cr-existing-index/index.yaml || echo "apiVersion: v1\nentries: {}\ngenerated: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > .cr-existing-index/index.yaml
+
+      - name: Package chart if new version
+        id: package
+        run: |
+          chart=${{ needs.detect-changed-chart.outputs.chart }}
+          name=$(yq '.name' $chart/Chart.yaml)
+          version=$(yq '.version' $chart/Chart.yaml)
+
+          exists=$(yq eval ".entries[\"$name\"][]?.version" .cr-existing-index/index.yaml | grep -Fx "$version" || true)
+
+          if [ -z "$exists" ]; then
+            echo "📦 Packaging new chart version: $name-$version"
+            helm package "$chart" --destination .cr-release-packages
+            echo "packaged=true" >> $GITHUB_OUTPUT
+          else
+            echo "✔️ Chart $name version $version already exists in index.yaml. Skipping package."
+            echo "packaged=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update index.yaml
-        if: steps.changed.outputs.charts != ''
+        if: steps.package.outputs.packaged == 'true'
         run: |
           helm repo index .cr-release-packages --url https://openwallet-foundation.github.io/helm-charts/
 
-      - name: Deploy to GitHub Pages
-        if: steps.changed.outputs.charts != ''
+      - name: Publish to GitHub Pages
+        if: steps.package.outputs.packaged == 'true'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
