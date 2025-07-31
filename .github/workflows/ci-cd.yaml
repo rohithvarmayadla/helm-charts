@@ -14,7 +14,7 @@ on:
       - 'charts/**'
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   pages: write
   id-token: write
@@ -84,8 +84,7 @@ jobs:
           fi
 
       - name: Lint changed chart
-        working-directory: ./charts
-        run: ct lint --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
+        run: ct lint --charts "charts/${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Validate chart templates
         working-directory: ./charts
@@ -100,8 +99,7 @@ jobs:
         uses: helm/kind-action@v1
 
       - name: Test install changed chart
-        working-directory: ./charts
-        run: ct install --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
+        run: ct install --charts "charts/${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Check version and appVersion bump
         working-directory: ./charts
