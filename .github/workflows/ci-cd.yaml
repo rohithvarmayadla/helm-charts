@@ -35,6 +35,7 @@ jobs:
 
   lint-test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     needs: detect-changed-chart
     steps:
       - uses: actions/checkout@v4
