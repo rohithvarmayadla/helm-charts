@@ -62,6 +62,7 @@ jobs:
         uses: helm/chart-testing-action@v2.7.0
 
       - name: Add Helm repos and update dependencies
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
 
@@ -83,9 +84,11 @@ jobs:
           fi
 
       - name: Lint changed chart
+        working-directory: ./charts
         run: ct lint --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Validate chart templates
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
           helm template "$chart" > /dev/null || {
@@ -97,9 +100,11 @@ jobs:
         uses: helm/kind-action@v1
 
       - name: Test install changed chart
+        working-directory: ./charts
         run: ct install --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Check version and appVersion bump
+        working-directory: ./charts
         run: |
           chart="${{ needs.detect-changed-chart.outputs.chart }}"
           echo "Checking $chart..."
@@ -136,6 +141,7 @@ jobs:
           npm install -g @bitnami/readme-generator-for-helm conventional-changelog-cli conventional-changelog-conventionalcommits
 
       - name: Check README and CHANGELOG updates
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
 
@@ -249,6 +255,7 @@ jobs:
           version: v3.18.4
 
       - name: Add Helm repos from chart dependencies
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
 
@@ -274,6 +281,7 @@ jobs:
 
       - name: Package chart if new version
         id: package
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
           name=$(yq '.name' $chart/Chart.yaml)
