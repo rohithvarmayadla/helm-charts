@@ -13,6 +13,12 @@ on:
     paths:
       - 'charts/**'
 
+permissions:
+  contents: read
+  pull-requests: write
+  pages: write
+  id-token: write
+
 jobs:
   detect-changed-chart:
     runs-on: ubuntu-latest
@@ -29,6 +35,7 @@ jobs:
 
   lint-test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     needs: detect-changed-chart
     steps:
       - uses: actions/checkout@v4
@@ -36,13 +43,13 @@ jobs:
           fetch-depth: 0
 
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cache/yq
             ~/.cache/helm
             ~/.npm
-          key: ${{ runner.os }}-deps-${{ needs.detect-changed-chart.outputs.chart }}-${{ hashFiles('${{ needs.detect-changed-chart.outputs.chart }}/**/*') }}
+          key: ${{ runner.os }}-deps-${{ needs.detect-changed-chart.outputs.chart }}-${{ hashFiles('charts/${{ needs.detect-changed-chart.outputs.chart }}/**/*') }}
           restore-keys: |
             ${{ runner.os }}-deps-
 
@@ -55,12 +62,9 @@ jobs:
         uses: helm/chart-testing-action@v2.7.0
 
       - name: Add Helm repos and update dependencies
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
-          if [ ! -f "$chart/Chart.yaml" ]; then
-            echo "❌ Chart.yaml not found in $chart"
-            exit 1
-          fi
 
           # Add Helm repos from chart dependencies
           yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml" | sort | uniq | while read repo; do
@@ -80,9 +84,11 @@ jobs:
           fi
 
       - name: Lint changed chart
+        working-directory: ./charts
         run: ct lint --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Validate chart templates
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
           helm template "$chart" > /dev/null || {
@@ -94,9 +100,11 @@ jobs:
         uses: helm/kind-action@v1
 
       - name: Test install changed chart
+        working-directory: ./charts
         run: ct install --charts "${{ needs.detect-changed-chart.outputs.chart }}" --config .github/ct.yaml
 
       - name: Check version and appVersion bump
+        working-directory: ./charts
         run: |
           chart="${{ needs.detect-changed-chart.outputs.chart }}"
           echo "Checking $chart..."
@@ -133,6 +141,7 @@ jobs:
           npm install -g @bitnami/readme-generator-for-helm conventional-changelog-cli conventional-changelog-conventionalcommits
 
       - name: Check README and CHANGELOG updates
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
 
@@ -246,12 +255,10 @@ jobs:
           version: v3.18.4
 
       - name: Add Helm repos from chart dependencies
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
-          if [ ! -f "$chart/Chart.yaml" ]; then
-            echo "❌ Chart.yaml not found in $chart"
-            exit 1
-          fi
+
           yq '.dependencies // [] | .[] | .repository' "$chart/Chart.yaml" | sort | uniq | while read repo; do
             if [ -n "$repo" ] && [ "$repo" != "null" ]; then
               name=$(echo "$repo" | sed 's|https\?://||;s|/|_|g;s|[^a-zA-Z0-9_-]||g')
@@ -274,6 +281,7 @@ jobs:
 
       - name: Package chart if new version
         id: package
+        working-directory: ./charts
         run: |
           chart=${{ needs.detect-changed-chart.outputs.chart }}
           name=$(yq '.name' $chart/Chart.yaml)
