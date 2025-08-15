@@ -13,15 +13,11 @@ on:
     paths:
       - 'charts/**'
 
-permissions:
-  contents: write
-  pull-requests: write
-  pages: write
-  id-token: write
-
 jobs:
   detect-changed-chart:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +32,9 @@ jobs:
   lint-test:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
     needs: detect-changed-chart
     steps:
       - uses: actions/checkout@v4
@@ -136,7 +135,7 @@ jobs:
 
       - name: Install readme and changelog generators
         run: |
-          npm install -g @bitnami/readme-generator-for-helm@2.7.0 conventional-changelog-cli@5.0.0 conventional-changelog-conventionalcommits
+          npm install -g @bitnami/readme-generator-for-helm@2.7.2 conventional-changelog-cli@5.0.0 conventional-changelog-conventionalcommits
 
       - name: Check README and CHANGELOG updates
         working-directory: ./charts
@@ -236,6 +235,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changed-chart]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
     concurrency:
       group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: true

@@ -1,6 +1,6 @@
 # AcaPy
 
-![Version: 0.1.2](https://img.shields.io/badge/Version-0.1.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.2.2](https://img.shields.io/badge/AppVersion-1.2.2-informational?style=flat-square)
+![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.3.1](https://img.shields.io/badge/AppVersion-1.3.1-informational?style=flat-square)
 
 A Helm chart to deploy A Cloud Agent - Python.
 
@@ -89,15 +89,17 @@ Note: Secure values of the configuration are passed via equivalent environment v
 | `argfile.yml.wallet-type`                         | Specifies the type of Indy wallet provider to use. Supported internal storage types are 'basic' (memory) and 'indy'. The default (if not specified) is 'basic'.                                                                                                                                                                                                                                      | `askar`                        |
 | `argfile.yml.webhook-url`                         | Send webhooks containing internal state changes to the specified URL. Optional API key to be passed in the request body can be appended using a hash separator [#]. This is useful for a controller to monitor agent events and respond to those events using the admin API. If not specified, webhooks are not published by the agent.                                                              | `{{ include "acapy.host" . }}` |
 | `ledgers.yml`                                     |                                                                                                                                                                                                                                                                                                                                                                                                      | `{}`                           |
+| `multitenancyConfiguration.json`                  | Raw json with config. Overrides all other values including subchart values. e.g.: '{"wallet_type":"single-wallet-askar", "wallet_name":"askar-wallet"}'                                                                                                                                                                                                                                              | `""`                           |
+| `multitenancyConfiguration.wallet_type`           | Database account name.                                                                                                                                                                                                                                                                                                                                                                               | `single-wallet-askar`          |
 | `plugin-config.yml`                               | Plugin configuration file                                                                                                                                                                                                                                                                                                                                                                            | `{}`                           |
 | `websockets.enabled`                              | Enable or disable the websocket transport for the agent.                                                                                                                                                                                                                                                                                                                                             | `false`                        |
 
 ### Wallet Storage configuration
 
-Specifies the storage configuration to use for the wallet.
-This is required if you are for using 'postgres_storage' wallet 'storage type.
-For example, '{"url":"localhost:5432", "wallet_scheme":"MultiWalletSingleTable"}'.
-This configuration maps to the indy sdk postgres plugin (PostgresConfig).
+ Specifies the storage configuration to use for the wallet.
+ This is required if you are for using 'postgres_storage' wallet 'storage type.
+ For example, '{"url":"localhost:5432", "wallet_scheme":"MultiWalletSingleTable"}'.
+ This configuration maps to the indy sdk postgres plugin (PostgresConfig).
 
 | Name                                  | Description                                                                                                                                                            | Value               |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
@@ -108,11 +110,11 @@ This configuration maps to the indy sdk postgres plugin (PostgresConfig).
 
 ### Wallet Storage Credentials
 
-Specifies the storage credentials to use for the wallet.
-This is required if you are for using 'postgres_storage' wallet 'storage type.
-For example, '{"account":"postgres","password":"mysecretpassword","admin_account":"postgres","admin_password":"mysecretpassword"}'.
-This configuration maps to the indy sdk postgres plugin (PostgresCredential).
-NOTE: admin_user must have the CREATEDB role or else initialization will fail.
+ Specifies the storage credentials to use for the wallet.
+ This is required if you are for using 'postgres_storage' wallet 'storage type.
+ For example, '{"account":"postgres","password":"mysecretpassword","admin_account":"postgres","admin_password":"mysecretpassword"}'.
+ This configuration maps to the indy sdk postgres plugin (PostgresCredential).
+ NOTE: admin_user must have the CREATEDB role or else initialization will fail.
 
 | Name                                                   | Description                                                                                                                                                                                                                    | Value               |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
@@ -300,6 +302,7 @@ NOTE: admin_user must have the CREATEDB role or else initialization will fail.
 | `postgresql.auth.enablePostgresUser`                  | Assign a password to the "postgres" admin user. Otherwise, remote access will be blocked for this user. Not recommended for production deployments.                                                                        | `true`                   |
 | `postgresql.auth.existingSecret`                      | Name of existing secret to use for PostgreSQL credentials                                                                                                                                                                  | `""`                     |
 | `postgresql.architecture`                             | PostgreSQL architecture (`standalone` or `replication`)                                                                                                                                                                    | `standalone`             |
+| `postgresql.commonLabels`                             | Common labels to add to all resources, add agent label for consistency.                                                                                                                                                    | `[]`                     |
 | `postgresql.primary.persistence.enabled`              | Enable PostgreSQL Primary data persistence using PVC                                                                                                                                                                       | `true`                   |
 | `postgresql.primary.persistence.size`                 | PVC Storage Request for PostgreSQL volume                                                                                                                                                                                  | `1Gi`                    |
 | `postgresql.primary.containerSecurityContext.enabled` | Enable container security context                                                                                                                                                                                          | `false`                  |
