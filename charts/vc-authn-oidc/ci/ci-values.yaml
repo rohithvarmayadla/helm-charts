@@ -1,0 +1,15 @@
+autoscaling:
+  enabled: false
+
+acapy:
+  autoscaling:
+    enabled: false
+  persistence:
+    enabled: false
+  postgresql:
+    persistence:
+      enabled: false
+
+mongodb:
+  persistence:
+    enabled: false
