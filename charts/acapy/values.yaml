@@ -220,6 +220,10 @@ websockets:
 ##   webhookapi    (optional key appended to webhook-url if using #APIKEY pattern)
 ## Seed Secret keys expected:
 ##   seed          (32 char wallet seed when wallet-local-did=true or deterministic DID needed)
+##
+## Note: When using multitenant mode, a seed should generally NOT be specified for the base wallet.
+##       This can be achieved by setting secrets.seed.enabled=false. However, if a seed is specified,
+##       the base wallet will need to be registered using the corresponding did/verkey onto the ledger where the agent is rooted.
 ## @descriptionEnd
 ##
 ## @param secrets.api.retainOnUninstall When true, adds helm.sh/resource-policy: keep to generated api secret
@@ -228,6 +232,7 @@ websockets:
 ## @param secrets.api.secretKeys.jwtKey Key in the API secret holding the multitenant JWT signing secret.
 ## @param secrets.api.secretKeys.walletKey Key in the API secret holding the wallet key.
 ## @param secrets.api.secretKeys.webhookapiKey Key in the API secret holding the webhook API key (used when embedding in webhook-url).
+## @param secrets.seed.enabled Enable creation and mounting of the seed secret as ACAPY_WALLET_SEED.
 ## @param secrets.seed.retainOnUninstall When true, adds helm.sh/resource-policy: keep to generated seed secret
 ## @param secrets.seed.existingSecret Name of an existing Secret providing the wallet seed. If set, the chart will NOT create the seed secret.
 ## @param secrets.seed.secretKeys.seed Key in the seed secret holding the wallet seed value.
@@ -241,6 +246,7 @@ secrets:
       walletKey: walletKey
       webhookapiKey: webhookapi
   seed:
+    enabled: true
     retainOnUninstall: true
     existingSecret: ""
     secretKeys:
@@ -942,6 +948,7 @@ containerSecurityContext:
 ## PostgreSQL chart configuration
 ## ref: https://github.com/bitnami/charts/blob/main/bitnami/postgresql/values.yaml
 ## @param postgresql.enabled Switch to enable or disable the PostgreSQL helm chart
+## @param postgresql.image [object] Set image parameters. Default to Bitnami Legacy repository.
 ## @param postgresql.auth.username Name for a custom user to create
 ## @param postgresql.auth.database Name for a custom database to create
 ## @param postgresql.auth.enablePostgresUser Assign a password to the "postgres" admin user. Otherwise, remote access will be blocked for this user. Not recommended for production deployments.
@@ -950,6 +957,10 @@ containerSecurityContext:
 ##
 postgresql:
   enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 16.4.0-debian-12-r14
   auth:
     username: acapy
     database: ""
