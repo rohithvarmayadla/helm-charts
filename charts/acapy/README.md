@@ -1,6 +1,6 @@
 # AcaPy
 
-![Version: 0.2.2](https://img.shields.io/badge/Version-0.2.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.3.1](https://img.shields.io/badge/AppVersion-1.3.1-informational?style=flat-square)
+![Version: 0.2.3](https://img.shields.io/badge/Version-0.2.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.3.1](https://img.shields.io/badge/AppVersion-1.3.1-informational?style=flat-square)
 
 A Helm chart to deploy A Cloud Agent - Python.
 
@@ -211,7 +211,6 @@ Note: When using multitenant mode, a seed should generally NOT be specified for 
 | `adminUrl`                       | must be set if ingress is not enabled                                                                                                                        | `""`                     |
 | `ingress.agent.enabled`          | Set to true to enable ingress record generation                                                                                                              | `false`                  |
 | `ingress.agent.pathType`         | Ingress Path type                                                                                                                                            | `ImplementationSpecific` |
-| `ingress.agent.apiVersion`       | Override API Version (automatically detected if not set)                                                                                                     | `""`                     |
 | `ingress.agent.hostname`         | When the ingress is enabled, a host pointing to this will be created                                                                                         | `acapy.local`            |
 | `ingress.agent.publicScheme`     | Scheme used to construct the public URL from the ingress host. Useful when TLS is terminated externally (e.g., OpenShift Routes) or handled by cert-manager. | `https`                  |
 | `ingress.agent.path`             | Default path for the ingress resource                                                                                                                        | `/`                      |
@@ -227,7 +226,6 @@ Note: When using multitenant mode, a seed should generally NOT be specified for 
 | `ingress.agent.extraRules`       | Additional rules to be covered with this ingress record                                                                                                      | `[]`                     |
 | `ingress.admin.enabled`          | Set to true to enable ingress record generation                                                                                                              | `false`                  |
 | `ingress.admin.pathType`         | Ingress Path type                                                                                                                                            | `ImplementationSpecific` |
-| `ingress.admin.apiVersion`       | Override API Version (automatically detected if not set)                                                                                                     | `""`                     |
 | `ingress.admin.hostname`         | When the ingress is enabled, a host pointing to this will be created                                                                                         | `admin.acapy.local`      |
 | `ingress.admin.path`             | Default path for the ingress resource                                                                                                                        | `/`                      |
 | `ingress.admin.annotations`      | Additional annotations for the Ingress resource. To enable certificate autogeneration, place here your cert-manager annotations.                             | `{}`                     |
