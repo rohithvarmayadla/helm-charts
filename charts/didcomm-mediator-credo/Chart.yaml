@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mediator
+description: A Helm chart for the Credo DIDComm Mediator Service
+type: application
+
+version: 0.3.0
+appVersion: "0.1.0"
+
+maintainers:
+  - email: emiliano.sune@quartech.com
+    name: esune
+    url: https://github.com/esune
+
+dependencies:
+  - name: common
+    repository: "https://charts.bitnami.com/bitnami"
+    tags:
+      - bitnami-common
+    version: 2.x.x
