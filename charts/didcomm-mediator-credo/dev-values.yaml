@@ -1,0 +1,69 @@
+# Values for DIDComm Mediator Credo - Dev Environment
+# Namespace: didcomm-mediator-dev
+#
+# This file overrides the default values to:
+# - Remove PostgreSQL dependency (uses in-memory/SQLite storage)
+# - Configure for dev environment
+# - Remove database secret references that don't exist
+
+replicaCount: 1
+
+# Override environment variables to remove PostgreSQL secret references
+# and configure for in-memory mode
+environment:
+  - name: LOG_LEVEL
+    value: "2"  # Debug level for dev
+  - name: AGENT_PORT
+    value: "3000"
+  - name: AGENT_NAME
+    value: Mediator-Dev
+  - name: AGENT_ENDPOINTS
+    value: "http://mediator-dev.trustservices.quartech.com"
+  - name: WALLET_NAME
+    value: mediator-wallet
+  # DO NOT set PICKUP_TYPE - this will use in-memory (no persistence)
+  # Setting it to "null" causes an error: "Unsupported pickup type: null"
+  # To use PostgreSQL, set PICKUP_TYPE: "Postgres" and configure database
+  - name: PICKUP_STRATEGY
+    value: DirectDelivery
+  - name: CREATE_NEW_INVITATION
+    value: "false"
+  - name: GOAL_CODE
+    value: "vc.mediate"
+  - name: USE_PUSH_NOTIFICATIONS
+    value: "false"
+  - name: PUSH_NOTIFICATION_TITLE
+    value: "You have a new message"
+  - name: PUSH_NOTIFICATION_BODY
+    value: "Open your app to read it"
+
+# Service configuration (internal only, no ingress)
+service:
+  type: ClusterIP
+  port: 3000
+
+# Ingress disabled - mediator doesn't need public HTTP access
+# Wallets connect via DIDComm protocol directly to the service
+ingress:
+  enabled: false
+
+# Network policy enabled for security
+networkPolicy:
+  enabled: true
+  ingress:
+    enabled: true
+    namespaceSelector: {}
+    podSelector: {}
+
+# ServiceAccount (auto-created)
+serviceAccount:
+  create: true
+  automount: true
+
+# Autoscaling disabled for dev
+autoscaling:
+  enabled: false
+
+# PostgreSQL configuration (disabled for dev - uses in-memory)
+postgresql:
+  enabled: false
