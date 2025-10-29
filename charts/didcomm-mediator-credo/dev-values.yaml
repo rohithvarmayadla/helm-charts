@@ -1,6 +1,8 @@
-# Values for DIDComm Mediator Credo - Dev Environment
-# Namespace: didcomm-mediator-dev
+# ⚠️ WARNING: This file contains environment-specific configuration
+# DO NOT COMMIT this file with your actual URLs and environment details
+# Use this as a template for local deployments only
 #
+# Values for DIDComm Mediator Credo - Dev Environment
 # This file overrides the default values to:
 # - Remove PostgreSQL dependency (uses in-memory/SQLite storage)
 # - Configure for dev environment
@@ -12,13 +14,13 @@ replicaCount: 1
 # and configure for in-memory mode
 environment:
   - name: LOG_LEVEL
-    value: "2"  # Debug level for dev
+    value: "2" # Debug level for dev
   - name: AGENT_PORT
     value: "3000"
   - name: AGENT_NAME
     value: Mediator-Dev
   - name: AGENT_ENDPOINTS
-    value: "http://mediator-dev.trustservices.quartech.com"
+    value: "REPLACE_WITH_YOUR_DEV_MEDIATOR_ENDPOINT"
   - name: WALLET_NAME
     value: mediator-wallet
   # DO NOT set PICKUP_TYPE - this will use in-memory (no persistence)
@@ -42,10 +44,33 @@ service:
   type: ClusterIP
   port: 3000
 
-# Ingress disabled - mediator doesn't need public HTTP access
-# Wallets connect via DIDComm protocol directly to the service
+# Ingress configuration for external access (mobile wallets)
 ingress:
-  enabled: false
+  enabled: true
+  className: "" # Not using className with Azure Application Gateway
+
+  labels:
+    app: didcomm-mediator # Required for template rendering
+
+  # Azure Application Gateway annotations (matching cluster standard)
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+    appgw.ingress.kubernetes.io/request-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-prod # Production certificate
+
+  # Host configuration
+  hosts:
+    - host: mediator-dev.trustservices.quartech.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  # TLS configuration (cert-manager will auto-provision certificate)
+  tls:
+    - secretName: mediator-dev-trustservices-tls
+      hosts:
+        - mediator-dev.trustservices.quartech.com
 
 # Network policy enabled for security
 networkPolicy:
