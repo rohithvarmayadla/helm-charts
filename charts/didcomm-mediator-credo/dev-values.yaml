@@ -1,37 +1,73 @@
-# ⚠️ WARNING: This file contains environment-specific configuration
-# DO NOT COMMIT this file with your actual URLs and environment details
-# Use this as a template for local deployments only
-#
 # Values for DIDComm Mediator Credo - Dev Environment
-# This file overrides the default values to:
-# - Remove PostgreSQL dependency (uses in-memory/SQLite storage)
-# - Configure for dev environment
-# - Remove database secret references that don't exist
+# Configured to use external PostgreSQL managed by CrunchyData Operator
 
 replicaCount: 1
 
-# Override environment variables to remove PostgreSQL secret references
-# and configure for in-memory mode
+# Environment variables configured for PostgreSQL persistence
 environment:
+  - name: NODE_ENV
+    value: "production"
   - name: LOG_LEVEL
     value: "2" # Debug level for dev
   - name: AGENT_PORT
     value: "3000"
   - name: AGENT_NAME
     value: Mediator-Dev
+  # Both HTTP and WebSocket endpoints (same host, protocol auto-negotiated)
   - name: AGENT_ENDPOINTS
-    value: "REPLACE_WITH_YOUR_DEV_MEDIATOR_ENDPOINT"
+    value: "https://mediator-dev.trustservices.quartech.com,wss://mediator-dev.trustservices.quartech.com"
   - name: WALLET_NAME
     value: mediator-wallet
-  # DO NOT set PICKUP_TYPE - this will use in-memory (no persistence)
-  # Setting it to "null" causes an error: "Unsupported pickup type: null"
-  # To use PostgreSQL, set PICKUP_TYPE: "Postgres" and configure database
+
+  # PostgreSQL connection configuration via HA endpoint (bypassing PgBouncer to avoid pg_hba issues)
+  # Secret created by CrunchyData operator: didcomm-database-pguser-mediator
+  # Application expects uppercase env vars per documentation
+  - name: POSTGRES_HOST
+    value: didcomm-database-ha.didcomm-mediator-dev.svc.cluster.local
+  - name: POSTGRES_USER
+    valueFrom:
+      secretKeyRef:
+        name: didcomm-database-pguser-mediator
+        key: user
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: didcomm-database-pguser-mediator
+        key: password
+  # Use mediator user (has CREATEDB privileges) for admin operations too
+  - name: POSTGRES_ADMIN_USER
+    valueFrom:
+      secretKeyRef:
+        name: didcomm-database-pguser-mediator
+        key: user
+  - name: POSTGRES_ADMIN_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: didcomm-database-pguser-mediator
+        key: password
+
+  # Enable PostgreSQL for pickup storage
+  - name: PICKUP_TYPE
+    value: "postgres"
+  # QueueAndLiveModeDelivery: Tries direct delivery first, falls back to queue for resilience
   - name: PICKUP_STRATEGY
-    value: DirectDelivery
+    value: QueueAndLiveModeDelivery
+  # PICKUP_SETTINGS is read from secret by the helm chart template
+
+  # Invitation Management
+  # false = Use existing invitation (recommended for production)
+  # true = Create new invitation on every startup (useful for testing)
   - name: CREATE_NEW_INVITATION
     value: "false"
+
+  # Goal Code: Identifies the purpose of the mediation invitation
+  # "vc.mediate" = Standard DIDComm mediation for verifiable credential workflows
   - name: GOAL_CODE
     value: "vc.mediate"
+
+  # Push Notifications: Requires Firebase configuration (firebase-* secrets)
+  # false = Disabled (mobile wallets poll for messages)
+  # true = Active push to mobile devices when messages arrive
   - name: USE_PUSH_NOTIFICATIONS
     value: "false"
   - name: PUSH_NOTIFICATION_TITLE
@@ -39,7 +75,7 @@ environment:
   - name: PUSH_NOTIFICATION_BODY
     value: "Open your app to read it"
 
-# Service configuration (internal only, no ingress)
+# Service configuration
 service:
   type: ClusterIP
   port: 3000
@@ -50,14 +86,15 @@ ingress:
   className: "" # Not using className with Azure Application Gateway
 
   labels:
-    app: didcomm-mediator # Required for template rendering
+    app: didcomm-mediator
 
   # Azure Application Gateway annotations (matching cluster standard)
   annotations:
     kubernetes.io/ingress.class: azure/application-gateway
     appgw.ingress.kubernetes.io/ssl-redirect: "true"
     appgw.ingress.kubernetes.io/request-timeout: "60"
-    cert-manager.io/cluster-issuer: letsencrypt-prod # Production certificate
+    appgw.ingress.kubernetes.io/backend-protocol: "http"  # Backend uses HTTP, WebSocket upgrade handled automatically
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 
   # Host configuration
   hosts:
@@ -80,15 +117,29 @@ networkPolicy:
     namespaceSelector: {}
     podSelector: {}
 
-# ServiceAccount (auto-created)
+# ServiceAccount
 serviceAccount:
   create: true
   automount: true
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 
 # Autoscaling disabled for dev
 autoscaling:
   enabled: false
 
-# PostgreSQL configuration (disabled for dev - uses in-memory)
+# PostgreSQL network policy configuration
+# This enables the mediator pods to access the PostgreSQL database
 postgresql:
-  enabled: false
+  enabled: true
+  selectorLabels:
+    postgres-operator.crunchydata.com/cluster: didcomm-database
+    postgres-operator.crunchydata.com/role: master
+  servicePort: 5432
